@@ -5,14 +5,26 @@
 
 var particles = [];
 var first_particle;
+var canvas_width;
+var canvas_height;
 var canvas_diag; // Maximum width of canvas - diagnoal
 // Noise in angle and magnitude
 var angle_noise = 0.1;
 var magnitude_noise = 0.1;
+var styles = [];//['rgba(255,0,0,0.5)','rgba(0,255,0,0.5)','rgba(0,0,255,0.5)','rgba(255,255,0,0.5)'];
 
 // Recurrent Neural Network
-var learning_rate = 0.05;
+var learning_rate = 0.03;
 var where_net;
+
+
+function genRandom(min, max) {
+    return min + Math.floor(Math.random() * (max - min + 1));
+}
+
+function genRandStyle(){
+    return "rgba(" + String(genRandom(0,255)) + "," + String(genRandom(0,255)) + "," + String(genRandom(0,255)) + ",0.5)";
+}
 
 var Vector = function(x, y) {
     this.x = x;
@@ -53,7 +65,7 @@ var Vector = function(x, y) {
       return (Math.atan(this.y/this.x) + (angle_noise * Math.PI/2 * (Math.random() - 0.5))) % Math.PI/2;// Tangent has range from -pi/2 to pi/2
     }
     this.noisy_magnitude = function(){
-      return Math.sqrt(this.x * this.x + this.y * this.y) + (magnitude_noise * canvas_diag * (Math.random() -0.5))
+      return Math.min(Math.sqrt(this.x * this.x + this.y * this.y) + (magnitude_noise * canvas_diag * (Math.random() -0.5)),canvas_diag); // Make sure magnitude isn't greater than canvas
     }
 }
 var Particle = function(canvas) {
@@ -67,7 +79,12 @@ var Particle = function(canvas) {
     this.position = new Vector(Math.random() * canvas.width, Math.random() * canvas.height)
     this.step = function() {
         // Train network
-        where_net.activate([this.position.x,this.position.y,this.velocity.noisy_angle(),this.velocity.noisy_magnitude()]);
+        // Normalize inputs
+        where_net.activate([this.position.x/canvas_width,
+                                        this.position.y/canvas_height,
+                                        (this.velocity.noisy_angle() + Math.PI/2) / Math.PI,
+                                        this.velocity.noisy_magnitude()/canvas_diag
+                                      ]);
 
         this.acceleration.validate();
         this.velocity.iadd(this.acceleration);
@@ -99,19 +116,29 @@ var Particle = function(canvas) {
         context.fillStyle = style;
 
         // Draw noisy point
-        var noisy_x = this.velocity.noisy_magnitude() * Math.cos(this.velocity.noisy_angle()) + this.position.x;
-        var noisy_y = this.velocity.noisy_magnitude() * Math.sin(this.velocity.noisy_angle()) + this.position.y;
-        context.arc(noisy_x, noisy_y, 5.0, 0, Math.PI * 2, false);
+        //var noisy_x = this.velocity.noisy_magnitude() * Math.cos(this.velocity.noisy_angle()) + this.position.x;
+        //var noisy_y = this.velocity.noisy_magnitude() * Math.sin(this.velocity.noisy_angle()) + this.position.y;
+        [noisy_x,noisy_y] = where_net.activate([this.position.x/canvas_width,
+                            this.position.y/canvas_height,
+                            (this.velocity.noisy_angle() + Math.PI/2) / Math.PI,
+                            this.velocity.noisy_magnitude()/canvas_diag
+                          ]);
+        //context.arc(noisy_x*canvas_width, noisy_y*canvas_height, 3.0, 0, Math.PI * 2, false);
+          context.rect(noisy_x*canvas_width, noisy_y*canvas_height, 10.0, 10.0);
         context.fill();
 
         // Backpropagate Network
-        where_net.propagate(learning_rate, [this.position.x, this.position.y]);
+        where_net.propagate(learning_rate, [this.position.x/canvas_width,
+                                            this.position.y/canvas_height
+                                          ]);
     }
 }
 var System = function(amount, milliseconds) {
     var factor = 9;
     var min_proximity = 4;
     var canvas = document.getElementById('particles');
+    canvas_width = canvas.width;
+    canvas_height = canvas.height;
     canvas_diag = Math.sqrt(canvas.height * canvas.height + canvas.width * canvas.width);
     var context = canvas.getContext('2d');
     for (var i = 0; i < amount; i++) {
@@ -131,19 +158,18 @@ var System = function(amount, milliseconds) {
             vec.idiv(Math.pow(length, 3) / factor);
             a.acceleration.isub(vec);
             a.step();
-            if(i==0){
-              // Make one arbitrarily different than the others for demonstration purposes
-              a.draw(context,"blue");
-            }else{
-              a.draw(context,'rgba(128,128,128,0.5)');
-            }
+            a.draw(context,styles[i])
         }
     }, milliseconds);
 }
 var main = function() {
-    var system = new System(10, 40);
+    var num_dots = 10;
+    var system = new System(num_dots, 40);
+    for(var i = 0; i<num_dots;i++){
+      styles.push(genRandStyle());
+    }
     // Neural Network
-    where_net = new Architect.Perceptron(4,16,10,2);
+    where_net = new Architect.Perceptron(4,30,2);
     // LSTM
     //where_net = new  Architect.LSTM(4,16,10,2);
 };
