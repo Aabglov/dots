@@ -11,10 +11,24 @@ var canvas_diag; // Maximum width of canvas - diagnoal
 // Noise in angle and magnitude
 var angle_noise = 0.1;
 var magnitude_noise = 0.1;
-var styles = [];//['rgba(255,0,0,0.5)','rgba(0,255,0,0.5)','rgba(0,0,255,0.5)','rgba(255,255,0,0.5)'];
+var num_iter = 0;
+
+
+//var styles = [];//['rgba(255,0,0,0.5)','rgba(0,255,0,0.5)','rgba(0,0,255,0.5)','rgba(255,255,0,0.5)'];
+var styles = ['rgba(255,0,0,1.0)',
+              'rgba(0,255,0,1.0)',
+              'rgba(0,0,255,1.0)',
+              'rgba(255,255,0,1.0)',
+              'rgba(0,255,255,1.0)',
+              'rgba(255,0,255,1.0)',
+              'rgba(255,128,0,1.0)',
+              'rgba(128,0,255,1.0)',
+              'rgba(255,0,128,1.0)',
+            ];
 
 // Recurrent Neural Network
 var learning_rate = 0.03;
+var where_net_array = [];
 var where_net;
 
 
@@ -24,6 +38,25 @@ function genRandom(min, max) {
 
 function genRandStyle(){
     return "rgba(" + String(genRandom(0,255)) + "," + String(genRandom(0,255)) + "," + String(genRandom(0,255)) + ",0.5)";
+}
+
+function predict(p,i){
+  var where_net = where_net_array[i];
+  if(num_iter < 10000){
+    var x_coord = p.position.x/canvas_width;
+    var y_coord = p.position.y/canvas_height;
+  }else{
+  // Then switch to using only predictions
+    var x_coord = p.noisy_x;
+    var y_coord = p.noisy_y;
+  }
+  [noisy_x,noisy_y] = where_net.activate([x_coord,
+                                          y_coord,
+                                          (p.velocity.noisy_angle() + Math.PI/2) / Math.PI,
+                                           p.velocity.noisy_magnitude()/canvas_diag
+                                        ]);
+  p.noisy_x = noisy_x;
+  p.noisy_y = noisy_y;
 }
 
 var Vector = function(x, y) {
@@ -72,19 +105,17 @@ var Particle = function(canvas) {
     var initial_speed = 1;
     var speed_limit = 4;
     var bounce_damping = 0.5;
+    this.prev_x = 0;
+    this.prev_y = 0;
     this.acceleration = new Vector(0, 0);
     this.velocity = new Vector(Math.random() * initial_speed -
         initial_speed * 0.5, Math.random() * initial_speed -
         initial_speed * 0.5)
     this.position = new Vector(Math.random() * canvas.width, Math.random() * canvas.height)
-    this.step = function() {
+    this.step = function(i) {
         // Train network
         // Normalize inputs
-        where_net.activate([this.position.x/canvas_width,
-                                        this.position.y/canvas_height,
-                                        (this.velocity.noisy_angle() + Math.PI/2) / Math.PI,
-                                        this.velocity.noisy_magnitude()/canvas_diag
-                                      ]);
+        predict(this,i);
 
         this.acceleration.validate();
         this.velocity.iadd(this.acceleration);
@@ -109,28 +140,23 @@ var Particle = function(canvas) {
             this.velocity.y *= -bounce_damping;
         }
     }
-    this.draw = function(context,style) {
+    this.draw = function(context,style,i) {
         // Draw the point
         context.beginPath();
         context.arc(this.position.x, this.position.y, 5.0, 0, Math.PI * 2, false);
         context.fillStyle = style;
 
-        // Draw noisy point
-        //var noisy_x = this.velocity.noisy_magnitude() * Math.cos(this.velocity.noisy_angle()) + this.position.x;
-        //var noisy_y = this.velocity.noisy_magnitude() * Math.sin(this.velocity.noisy_angle()) + this.position.y;
-        [noisy_x,noisy_y] = where_net.activate([this.position.x/canvas_width,
-                            this.position.y/canvas_height,
-                            (this.velocity.noisy_angle() + Math.PI/2) / Math.PI,
-                            this.velocity.noisy_magnitude()/canvas_diag
-                          ]);
-        //context.arc(noisy_x*canvas_width, noisy_y*canvas_height, 3.0, 0, Math.PI * 2, false);
-          context.rect(noisy_x*canvas_width, noisy_y*canvas_height, 10.0, 10.0);
+        // Calculate noisy point
+        // predict(this);
+
+        context.rect(this.noisy_x*canvas_width, this.noisy_y*canvas_height, 10.0, 10.0);
         context.fill();
 
         // Backpropagate Network
-        where_net.propagate(learning_rate, [this.position.x/canvas_width,
+        where_net_array[i].propagate(learning_rate, [this.position.x/canvas_width,
                                             this.position.y/canvas_height
                                           ]);
+        num_iter++;
     }
 }
 var System = function(amount, milliseconds) {
@@ -146,6 +172,7 @@ var System = function(amount, milliseconds) {
         first_particle = particles[0];
     }
     setInterval(function() {
+        context.fillStyle = 'rgba(0,0,0,1.0)';
         context.globalCompositeOperation = 'source-in';
         context.fillRect(0, 0, canvas.width, canvas.height);
         context.globalCompositeOperation = 'lighter';
@@ -157,19 +184,20 @@ var System = function(amount, milliseconds) {
             var length = vec.length();
             vec.idiv(Math.pow(length, 3) / factor);
             a.acceleration.isub(vec);
-            a.step();
-            a.draw(context,styles[i])
+            a.step(i);
+            a.draw(context,styles[i],i)
         }
     }, milliseconds);
 }
 var main = function() {
-    var num_dots = 10;
+    var num_dots = 9;
     var system = new System(num_dots, 40);
-    for(var i = 0; i<num_dots;i++){
-      styles.push(genRandStyle());
-    }
+
     // Neural Network
-    where_net = new Architect.Perceptron(4,30,2);
+    //where_net = new Architect.Perceptron(4,30,2);
     // LSTM
-    //where_net = new  Architect.LSTM(4,16,10,2);
+    //where_net = new  Architect.LSTM(4,10,10,2);
+    for(var i = 0; i<num_dots;i++){
+      where_net_array.push(new Architect.LSTM(4,10,10,2));
+    }
 };
