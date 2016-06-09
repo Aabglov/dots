@@ -28,7 +28,7 @@ var styles = ['rgba(255,0,0,1.0)',
             ];
 
 // Recurrent Neural Network
-var learning_rate = 0.01;
+var learning_rate = 0.001;
 var where_net;
 
 
@@ -45,8 +45,8 @@ function stackInputs(P){
   var inputs = []
   for(var i = 0; i<P.length; i++){
     var p = P[i];
-    inputs.push( p.noisy_x );
-    inputs.push( p.noisy_y );
+    inputs.push( p.position.normalized_x() ); //p.noisy_x );
+    inputs.push( p.position.normalized_y() ); //p.noisy_y );
     inputs.push( p.velocity.normalized_noisy_angle() );
     inputs.push( p.velocity.normalized_noisy_magnitude() );
   }
@@ -77,13 +77,13 @@ function predict(P){
 
 function learn(P){
   // Backpropagate Network
-  if(num_iter < 10000){
+  //if(num_iter < 10000){
     outputs = stackOutputs(P);
     where_net.propagate(learning_rate, outputs);
-  }else if(num_iter % 10 == 0){ // only update parameters 10% of the time after initial training
-    outputs = stackOutputs(P);
-    where_net.propagate(0.1, outputs);
-  }
+  //}else if(num_iter % 10 == 0){ // only update parameters 10% of the time after initial training
+  //  outputs = stackOutputs(P);
+  //  where_net.propagate(0.1, outputs);
+  //}
 }
 
 var Vector = function(x, y) {
@@ -229,5 +229,53 @@ var main = function() {
     //where_net = new Architect.Perceptron(4,20,10,2);
 
     // LSTM
-    where_net = new Architect.LSTM(4*num_dots,10,10,2*num_dots);
+    where_net = new Architect.LSTM(4*num_dots,40,2*num_dots);
 };
+
+// Data collection functions
+// DO NOT RUN OUTSIDE OF LOCALHOST - SUPER DANGEROUS
+/*
+function addData(P){
+  if(num_iter < 100000){
+    var p = P[0];
+    var x = String(p.noisy_x) + "," +
+             String(p.noisy_y) + "," +
+             String(p.velocity.normalized_noisy_angle()) + "," +
+             String(p.velocity.normalized_noisy_magnitude());
+    var y = String(p.position.normalized_x()) + "," +
+             String(p.position.normalized_y());
+    for(var i=1;i<P.length;i++){
+      var dx = "," + String(p.noisy_x) + "," +
+               String(p.noisy_y) + "," +
+               String(p.velocity.normalized_noisy_angle()) + "," +
+               String(p.velocity.normalized_noisy_magnitude());
+      var dy = "," + String(p.position.normalized_x()) + "," +
+               String(p.position.normalized_y());
+      x += dx;
+      y += dy;
+    }
+    if(!x.includes("undefined") && !y.includes("undefined")){
+      data_x += x + "\n";
+      data_y += y + "\n";
+    }
+    if(num_iter % 1000 == 0){
+      console.log(num_iter);
+    }
+  }
+}
+
+function download(text,name) {
+  var element = document.createElement('a');
+  element.setAttribute('href', 'data:text/plain;charset=utf-8,' + encodeURIComponent(text));
+  element.setAttribute('download', name);
+  document.body.appendChild(element);
+  element.click();
+}
+
+function show(){
+  var data = "<p>" + data_x + "</p>";
+  var myWindow = window.open("data:text/html," + encodeURIComponent(data),
+                         "_blank", "width=200,height=100");
+  myWindow.focus();
+}
+*/
